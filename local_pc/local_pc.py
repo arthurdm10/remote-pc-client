@@ -2,6 +2,7 @@ import websocket
 import json
 from .commands import available_cmds
 from urllib.parse import urlparse
+import threading
 
 
 class LocalPc:
@@ -15,6 +16,8 @@ class LocalPc:
         on_error = lambda ws, error: self._on_error(ws, error)
         on_close = lambda ws: self._on_close(ws)
 
+        self.streamThread = None
+        self.streamCanceledEvent = threading.Event()
 
         self.wsConn = websocket.WebSocketApp(remoteServerUrl, on_open=on_open, on_data=on_data, on_close=on_close, on_error=on_error)
 
@@ -27,30 +30,42 @@ class LocalPc:
         
         if dataType == OPCODE_TEXT:
             jsonData = json.loads(data)
-            if jsonData["type"] == "command":
+            requestType = jsonData["type"]
+            if requestType == "command":
                 self.handle_command(jsonData)
-            elif jsonData["type"] == "info":
+            elif requestType == "info":
                 print("received info")
+            elif requestType == "cancel_stream":
+                # cancel the current running stream
+                if self.streamThread.is_alive():
+                    self.streamCanceledEvent.set()
 
         elif dataType == OPCODE_BINARY:
-            print("receveid binary data")
+            print("received binary data")
 
     def handle_command(self, cmdData):
         cmd = cmdData["cmd"]
 
         if cmd in available_cmds:
             cmdFunc = available_cmds[cmd]
-            try:
-                output = cmdFunc(cmdData["args"])
-                response = {"cmd_response": cmd, "data": output}
-            except Exception as e:
-                response = {"cmd_response": cmd, "error": str(e)}
+            cmdArgs = cmdData["args"]
+            print(cmdData)
+            if not cmdData["stream"]:
+                try:
+                    output = cmdFunc(cmdArgs)
+                    response = {"cmd_response": cmd, "response": output}
+                except Exception as e:
+                    print(str(e))
+                    response = {"cmd_response": cmd, "error": str(e)}
 
-            self.wsConn.send(json.dumps(response))
-
+                self.wsConn.send(json.dumps(response))
+            else:
+                self.streamThread = threading.Thread(target=cmdFunc, args=(cmdArgs, self.wsConn, self.streamCanceledEvent))
+                self.streamThread.start()
+                # cmdFunc(cmdArgs, self.wsConn)
         else:
             print(f"command '{cmd}' not found")
-            self.wsConn.send(json.dumps(output))
+            self.wsConn.send(json.dumps({"error": "Invalid command"}))
 
 
     def _on_error(self, ws, error):

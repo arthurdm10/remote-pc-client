@@ -4,7 +4,7 @@ sys.path.append("..")
 
 from remote_pc_py.local_pc import commands
 import unittest
-
+import os
 
 class TestCommands(unittest.TestCase):
     testFolder = "./test/test_folder"
@@ -26,6 +26,20 @@ class TestCommands(unittest.TestCase):
 
         success = commands.delete_file([fileName])
         self.assertTrue(success)
+
+    
+    def test_rename_file(self):
+        fileNameSrc = f"{self.testFolder}/file000"
+        fileNameDst = f"{self.testFolder}/file001"
+        
+        file = open(fileNameSrc, "w")
+        file.close()
+
+        success = commands.rename_file([fileNameSrc, fileNameDst])
+        self.assertTrue(success)
+
+        os.remove(fileNameDst)
+
 
 if __name__ == '__main__':
 
