@@ -9,7 +9,9 @@ class LocalPc:
 
 
     def __init__(self, key, remoteServer, remotePort=9002):
-        remoteServerUrl = f"ws://{remoteServer}:{remotePort}/create/{key}"
+        self.remoteServerUrl = f"ws://{remoteServer}:{remotePort}/connect/{key}"
+        self.connectionUrl = f"ws://{remoteServer}:{remotePort}/access/{key}"
+        self.key = key
         
         on_open = lambda ws: self._on_open(ws)
         on_data = lambda ws, data, dataType, continues: self._on_data(ws,data, dataType, continues)
@@ -19,7 +21,12 @@ class LocalPc:
         self.streamThread = None
         self.streamCanceledEvent = threading.Event()
 
-        self.wsConn = websocket.WebSocketApp(remoteServerUrl, on_open=on_open, on_data=on_data, on_close=on_close, on_error=on_error)
+        self.wsConn = websocket.WebSocketApp(self.remoteServerUrl,
+         on_open=on_open,
+         on_data=on_data,
+         on_close=on_close, 
+         on_error=on_error,
+         header={"X-Username": "username", "X-Password": "passwd"})
 
     def run(self):
         self.wsConn.run_forever()
@@ -34,7 +41,7 @@ class LocalPc:
             if requestType == "command":
                 self.handle_command(jsonData)
             elif requestType == "info":
-                print("received info")
+                print(jsonData)
             elif requestType == "cancel_stream":
                 # cancel the current running stream
                 if self.streamThread.is_alive():
@@ -51,12 +58,19 @@ class LocalPc:
             cmdArgs = cmdData["args"]
             print(cmdData)
             if not cmdData["stream"]:
+                response = {"cmd_response": cmd, "error_code": 0xffcc}
                 try:
                     output = cmdFunc(cmdArgs)
                     response = {"cmd_response": cmd, "response": output}
-                except Exception as e:
-                    print(str(e))
-                    response = {"cmd_response": cmd, "error": str(e)}
+                    self.wsConn.send(json.dumps(response))
+                    return
+                except FileNotFoundError:
+                    response["error_msg"] = "File/directory not found"
+                except FileExistsError:
+                    response["error_msg"] = "File/directory already exists"
+                except:
+                    response["error_msg"] = "Unknown error"
+                    # response = {"cmd_response": cmd, "error_code": 0xffcc, "error_msg": str(e)}
 
                 self.wsConn.send(json.dumps(response))
             else:
@@ -69,10 +83,11 @@ class LocalPc:
 
 
     def _on_error(self, ws, error):
-        print(error)
+        pass
+        # print(f"Error: {error}")
 
     def _on_close(self, ws):
-        print("### closed ###")
+        self.wsConn.run_forever()
 
     def _on_open(self, ws):
         print("Connected to remote server")

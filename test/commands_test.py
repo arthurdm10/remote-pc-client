@@ -27,7 +27,6 @@ class TestCommands(unittest.TestCase):
         success = commands.delete_file([fileName])
         self.assertTrue(success)
 
-    
     def test_rename_file(self):
         fileNameSrc = f"{self.testFolder}/file000"
         fileNameDst = f"{self.testFolder}/file001"
@@ -39,6 +38,7 @@ class TestCommands(unittest.TestCase):
         self.assertTrue(success)
 
         os.remove(fileNameDst)
+
 
 
 if __name__ == '__main__':

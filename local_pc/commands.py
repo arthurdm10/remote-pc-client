@@ -9,7 +9,7 @@ import psutil
 
 DEFAULT_BUFFER_SIZE = 8 * 1024
 
-
+#TODO: IMPROVE ERROR HANDLING
 
 def list_dir(args: list) -> list:
     
@@ -23,6 +23,10 @@ def list_dir(args: list) -> list:
     return list(map(fileToJson, list(files)))
 
 
+def create_dir(args: list) -> None:
+    os.mkdir(args[0])
+
+
 def delete_file(args: list) -> bool:
     path = args[0]
     
@@ -33,11 +37,14 @@ def delete_file(args: list) -> bool:
     return True
 
 
+
+
 def rename_file(args: list) -> bool:
     src, dst = args[0], args[1]
     
     os.rename(src, dst)
     return True
+    
 
 
 # return a list of running processes, total usage of cpu and memory
@@ -84,15 +91,16 @@ def download_file(args: list, wsConn: WebSocketApp, event: Event):
         fileSize = fileStat.st_size
 
         if fileSize < 0:
-            # wsConn.send(json.dumps({"cmd_response":"download_file", "error":"File is empty"}))/
             _send_cmd_response(wsConn, "download_file", "error", "File is empty")
         else:
-            # wsConn.send(json.dumps({"cmd_response":"download_file", "size": fileSize}))
             _send_cmd_response(wsConn, "download_file", "size", fileSize)
 
-
             with open(fileName, "rb") as file:
-                bufferSize = DEFAULT_BUFFER_SIZE if fileSize >= DEFAULT_BUFFER_SIZE else fileSize
+                bufferSize = DEFAULT_BUFFER_SIZE
+                
+                if fileSize < DEFAULT_BUFFER_SIZE:
+                    bufferSize = fileSize
+                    
                 complete = _stream_data(file, bufferSize, wsConn, event)
                 if not complete:
                     _send_stream_canceled(wsConn, "download_file")
@@ -100,18 +108,19 @@ def download_file(args: list, wsConn: WebSocketApp, event: Event):
                     # wsConn.send(json.dumps({"cmd_response": "download_file", "file_hash":"123"}))
                     _send_cmd_response(wsConn, "download_file", "file_hash", "123")
                     print("file sent")
+    
+    else:
+        _send_cmd_response(wsConn, "download_file", "error", "Invalid file")
 
 
 def screenshot(args: list, wsConn: WebSocketApp, event: Event):
     img = pySs.grab()
     buff = BytesIO()
     img.save(buff, format="jpeg", quality=30)
-    # wsConn.send(json.dumps({"cmd_response":"download_file", "size": buff.getbuffer().nbytes}))
     _send_cmd_response(wsConn, "download_file", "size", buff.getbuffer().nbytes)
 
     buff.seek(0)
 
-    print(f"screenshot size {buff.getbuffer().nbytes} bytes")
     complete = _stream_data(buff, DEFAULT_BUFFER_SIZE, wsConn, event)
     buff.close()
 
@@ -119,13 +128,13 @@ def screenshot(args: list, wsConn: WebSocketApp, event: Event):
         _send_stream_canceled(wsConn, "download_file")
     else:
         _send_cmd_response(wsConn, "download_file", "file_hash", "123")
-        print("file sent") 
         
 
-
-def _stream_data(buff, bufferSize: int, wsConn: WebSocketApp, event: Event) -> bool:
+#Send binary data from buffer through websocket
+#event is used to cancel the stream
+def _stream_data(buffer, bufferSize: int, wsConn: WebSocketApp, event: Event) -> bool:
     while True:
-        data = buff.read(bufferSize)
+        data = buffer.read(bufferSize)
         if not data:
             break
         elif event.is_set():
@@ -139,6 +148,7 @@ def _stream_data(buff, bufferSize: int, wsConn: WebSocketApp, event: Event) -> b
 
 available_cmds = {
 	"ls_dir":      list_dir,
+    "create_dir":   create_dir,
 	"delete_file": delete_file,
 	"rename_file": rename_file,
     "download_file": download_file,
