@@ -1,0 +1,45 @@
+/**
+    por padrao, o usuario tem permissao para executar todos os comandos sem nenhuma restricao,
+    apenas os comandos com "allow: false" serao desabilitados,
+    podendo ter excoes 
+*/
+
+//allow_subdir so tera efeito em comandos relacionados a arquivos (delete, rename, download)
+//por padrao allow_subdir eh true para todos os comandos
+
+{
+  "username": "user",
+  "permissions": {
+    "commands": {
+      "ls_dir": {
+        "allow": false,     // desativa o comando para listar arquivos de um diretorio em todo o computador, 
+                            // exceto no diretorio '/home/test' e subdiretorios
+        "restrictions": [
+          "path": "/home/test"
+          "allow": true
+        ]
+      },
+      "download_file": {
+        "allow": true,
+        "restrictions": [
+          {
+            "path": "/home/test",   // usuario pode fazer o download de arquivo de todo o computador
+                                    // exceto no diretorio '/home/test'
+            "allow": false,
+            "allow_subdir": true    // o download de arquivos dentro de subdiretorios eh permitido
+          }
+        ]
+      },
+      "delete_file": {
+        "allow": false,
+        "restrictions": [
+          {
+            "path": "/home/test/some/dir",
+            "allow": true,
+            "allow_subdir": true
+          }
+        ]
+      }
+    }
+  }
+}

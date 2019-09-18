@@ -3,16 +3,19 @@ import json
 from .commands import available_cmds
 from urllib.parse import urlparse
 import threading
+import requests
 
 
 class LocalPc:
 
 
-    def __init__(self, key, remoteServer, remotePort=9002):
-        self.remoteServerUrl = f"ws://{remoteServer}:{remotePort}/connect/{key}"
-        self.connectionUrl = f"ws://{remoteServer}:{remotePort}/access/{key}"
+    def __init__(self, username, password, key, remoteServer, initialDir="/home"):
+        self.remoteServer = remoteServer
+        self.remoteServerUrl = f"ws://{remoteServer}/connect/{key}"
+        self.connectionUrl = f"ws://{remoteServer}/access/{key}"
         self.key = key
-        
+        self.initialDir = initialDir
+
         on_open = lambda ws: self._on_open(ws)
         on_data = lambda ws, data, dataType, continues: self._on_data(ws,data, dataType, continues)
         on_error = lambda ws, error: self._on_error(ws, error)
@@ -26,7 +29,7 @@ class LocalPc:
          on_data=on_data,
          on_close=on_close, 
          on_error=on_error,
-         header={"X-Username": "username", "X-Password": "passwd"})
+         header={"X-Username": username, "X-Password": password})
 
     def run(self):
         self.wsConn.run_forever()
@@ -39,24 +42,31 @@ class LocalPc:
             jsonData = json.loads(data)
             requestType = jsonData["type"]
             if requestType == "command":
-                self.handle_command(jsonData)
+                if jsonData["cmd"] == "initial_dir":
+                    response = {"cmd_response": "initial_dir", "response": self.initialDir}
+                    self.wsConn.send(json.dumps(response))
+                else:
+                    self.handle_command(jsonData)
+
             elif requestType == "info":
-                print(jsonData)
+                if jsonData["code"] == 252:
+                    print("New user connected!")
+
             elif requestType == "cancel_stream":
-                # cancel the current running stream
                 if self.streamThread.is_alive():
                     self.streamCanceledEvent.set()
 
         elif dataType == OPCODE_BINARY:
+            # no usage for now
             print("received binary data")
-
+    
     def handle_command(self, cmdData):
         cmd = cmdData["cmd"]
 
         if cmd in available_cmds:
             cmdFunc = available_cmds[cmd]
             cmdArgs = cmdData["args"]
-            print(cmdData)
+            
             if not cmdData["stream"]:
                 response = {"cmd_response": cmd, "error_code": 0xffcc}
                 try:
@@ -70,26 +80,78 @@ class LocalPc:
                     response["error_msg"] = "File/directory already exists"
                 except:
                     response["error_msg"] = "Unknown error"
-                    # response = {"cmd_response": cmd, "error_code": 0xffcc, "error_msg": str(e)}
 
                 self.wsConn.send(json.dumps(response))
             else:
                 self.streamThread = threading.Thread(target=cmdFunc, args=(cmdArgs, self.wsConn, self.streamCanceledEvent))
                 self.streamThread.start()
-                # cmdFunc(cmdArgs, self.wsConn)
         else:
-            print(f"command '{cmd}' not found")
+            
             self.wsConn.send(json.dumps({"error": "Invalid command"}))
 
 
     def _on_error(self, ws, error):
-        pass
-        # print(f"Error: {error}")
+        
+        if error.status_code == 403:
+            print("[!] Access Denied")
+            exit(1)
+
+        print(f"Error: {error}")
+        exit(1)
 
     def _on_close(self, ws):
         self.wsConn.run_forever()
 
     def _on_open(self, ws):
-        print("Connected to remote server")
+        print(f"Connected to remote server: {self.remoteServer}")
 
 
+    @staticmethod
+    def register_pc(remoteServer, adminUsername, adminPassword, username, password, key: str) -> int:
+        return _register("pc", remoteServer, adminUsername, adminPassword, username, password, key)
+
+            
+
+    # Create a new user that can be used to access this PC
+    # adminUsername, adminPassword: Credentials defined on the remote server
+    # key: The key used to register this PC
+    @staticmethod
+    def register_user(remoteServer, adminUsername, adminPassword, username, password, key: str) -> int:
+        return _register("user", remoteServer, adminUsername, adminPassword, username, password, key)
+
+
+    @staticmethod
+    def set_user_permission(permissionsFile, remoteServer, adminUsername, adminPassword, key: str):
+        try:
+            with open(permissionsFile, "r") as file:
+                permissions = json.loads(file.read())
+                response = requests.post(f"http://{remoteServer}/set_user_permissions/{key}",
+                                            headers=_credential_headers(adminUsername, adminPassword),
+                                            json=permissions)
+                return response.status_code
+        except FileNotFoundError:
+            print(f"File '{permissionsFile} not found!")
+        except Exception as err:
+            print(err)
+        return -1    
+
+def _credential_headers(username, password: str) -> dict():
+    return {"X-Username": username, "X-Password": password}
+
+
+def _register(userType, remoteServer, adminUsername, adminPassword, username, password, key: str) -> int:
+        path = "create_pc" if userType == "pc" else "create_user"
+        jsonBody = {"username": username, "password": password}
+        
+        if userType == "pc":
+            jsonBody["key"] = key
+
+        try:
+            response = requests.post(f"http://{remoteServer}/{path}/{key}",
+                                     headers=_credential_headers(adminUsername, adminPassword),
+                                    json=jsonBody)
+            return response.status_code
+        except Exception as err:
+            print(err)
+        
+        return 0
