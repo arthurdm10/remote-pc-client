@@ -1,3 +1,5 @@
+Python version: 3.6.8
+
 python main.py <server:port> <key>
 
 To register this PC:
@@ -18,4 +20,5 @@ python main.py user-permissions <permissions.json> <server:port> <key>
 <server:port>: Remote server
 <key>: The key used when this PC was registered
 
-Python version: 3.6.8
+Servidor: https://github.com/arthurdm10/remote-pc-server
+App: https://github.com/arthurdm10/remote-pc-app
