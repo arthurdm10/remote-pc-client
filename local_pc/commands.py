@@ -35,7 +35,7 @@ def delete_file(args: list) -> bool:
     if os.path.isfile(path):
         os.remove(path)
     else:
-        os.rmdir(path)
+        shutil.rmtree(path, ignore_errors=True)
     return True
 
 
