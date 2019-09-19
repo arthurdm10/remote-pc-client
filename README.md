@@ -17,7 +17,7 @@ To register a user:
 
 python main.py register-user server:port username password key
 
-server:port\: Remote server
+server:port: Remote server
 
 username password: Users credentials used to connect to this PC
 
@@ -30,7 +30,7 @@ python main.py user-permissions permissions.json server:port key
 
 permissions.json: File with users permissions
 
-server:port\: Remote server
+server:port: Remote server
 
 key: The key used when this PC was registered
 ```
