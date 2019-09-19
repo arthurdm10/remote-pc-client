@@ -4,17 +4,21 @@ from .commands import available_cmds
 from urllib.parse import urlparse
 import threading
 import requests
-
+from os import getcwd
+from hashlib import sha256
 
 class LocalPc:
 
 
-    def __init__(self, username, password, key, remoteServer, initialDir="/home"):
+    def __init__(self, username, password, key, remoteServer, initialDir=None):
         self.remoteServer = remoteServer
         self.remoteServerUrl = f"ws://{remoteServer}/connect/{key}"
         self.connectionUrl = f"ws://{remoteServer}/access/{key}"
         self.key = key
-        self.initialDir = initialDir
+        
+        
+        self.initialDir = getcwd() if initialDir is None else initialDir
+
 
         on_open = lambda ws: self._on_open(ws)
         on_data = lambda ws, data, dataType, continues: self._on_data(ws,data, dataType, continues)
@@ -29,7 +33,7 @@ class LocalPc:
          on_data=on_data,
          on_close=on_close, 
          on_error=on_error,
-         header={"X-Username": username, "X-Password": password})
+         header=_credential_headers(username, password))
 
     def run(self):
         self.wsConn.run_forever()
@@ -135,13 +139,18 @@ class LocalPc:
             print(err)
         return -1    
 
-def _credential_headers(username, password: str) -> dict():
-    return {"X-Username": username, "X-Password": password}
+def _credential_headers(username, password: str) -> dict:
+    return {"X-Username":  _hash_sha256(username), "X-Password": _hash_sha256(password)}
 
+def _hash_sha256(data: str) -> str:
+    sha = sha256()
+    sha.update(data.encode("utf-8"))
+    return sha.hexdigest()
 
 def _register(userType, remoteServer, adminUsername, adminPassword, username, password, key: str) -> int:
         path = "create_pc" if userType == "pc" else "create_user"
-        jsonBody = {"username": username, "password": password}
+        
+        jsonBody = {"username": _hash_sha256(username), "password": _hash_sha256(password)}
         
         if userType == "pc":
             jsonBody["key"] = key
